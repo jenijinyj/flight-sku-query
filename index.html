@@ -46,7 +46,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .list-item .rank { width: 32px; font-size: 12px; color: var(--text-muted); font-weight: 500; }
 .list-item .name { flex: 1; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .code-tag {  font-size: 11px; font-weight: 600; background: #eef2ff; color: #4338ca; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; }
-.list-item .segment { font-size: 13px; font-weight: 600; color: var(--primary); min-width: 80px; text-align: right; }
+.list-item .segment { display: none; font-size: 13px; font-weight: 600; color: var(--primary); min-width: 80px; text-align: right; }
 .expand-btn { width: 24px; height: 24px; border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; margin-right: 4px; flex-shrink: 0; }
 .expand-btn:hover { background: var(--primary-light); color: var(--primary); }
 .expand-btn.open { transform: rotate(90deg); }
@@ -58,14 +58,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .sub-item .rank { width: 32px; font-size: 11px; color: var(--text-muted); }
 .sub-item .name { flex: 1; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px; }
 .sub-item .expand-btn { margin-right: 4px; }
-.sub-item .segment { font-size: 12px; font-weight: 600; color: var(--accent-blue); min-width: 80px; text-align: right; }
+.sub-item .segment { display: none; font-size: 12px; font-weight: 600; color: var(--accent-blue); min-width: 80px; text-align: right; }
 .sub-sub-list { background: #f4f5fa; border-bottom: 1px solid var(--border); display: none; }
 .sub-sub-list.show { display: block; }
 .sub-sub-item { display: flex; align-items: center; padding: 6px 20px 6px 100px; border-bottom: 1px solid #eaecf3; font-size: 12px; }
 .sub-sub-item:hover { background: #edeff5; }
 .sub-sub-item .rank { width: 32px; color: var(--text-muted); }
 .sub-sub-item .name { flex: 1; }
-.sub-sub-item .segment { font-weight: 600; color: #6366f1; min-width: 80px; text-align: right; }
+.sub-sub-item .segment { display: none; font-weight: 600; color: #6366f1; min-width: 80px; text-align: right; }
 .empty-state { padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .badge-airline { background: #dbeafe; color: #1d4ed8;  }
@@ -244,7 +244,7 @@ function renderAirlineMode(panel, rows) {
   rows.forEach(r => { if (!byAirline.has(r[0])) byAirline.set(r[0], []); byAirline.get(r[0]).push(r); });
   const airlineTotals = Array.from(byAirline.entries()).map(([al, rs]) => ({ al, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
   const grand = airlineTotals.reduce((s,a) => s + a.total, 0);
-  let html = `<div class="results-header"><h2>🛫 Airline → Country → City（${filterTitle()}）</h2><span class="count">${airlineTotals.length} airlines · ${fmtNum(grand)} segments</span></div><div class="list-container">`;
+  let html = `<div class="results-header"><h2>🛫 Airline → Country → City（${filterTitle()}）</h2><span class="count">${airlineTotals.length} airlines</span></div><div class="list-container">`;
   airlineTotals.forEach((a, i) => {
     const aid = `al_${i}`;
     html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${aid}', this)">▶</button><span class="rank">${i+1}</span><span class="name"><span class="badge badge-airline">${a.al}</span></span><span class="segment">${fmtNum(a.total)}</span></div>`;
@@ -273,7 +273,7 @@ function renderCountryMode(panel, rows) {
   rows.forEach(r => { if (!byCountry.has(r[3])) byCountry.set(r[3], []); byCountry.get(r[3]).push(r); });
   const countryTotals = Array.from(byCountry.entries()).map(([co, rs]) => ({ co, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
   const grand = countryTotals.reduce((s,c) => s + c.total, 0);
-  let html = `<div class="results-header"><h2>🌍 Country → City → Airline（${filterTitle()}）</h2><span class="count">${countryTotals.length} countries · ${fmtNum(grand)} segments</span></div><div class="list-container">`;
+  let html = `<div class="results-header"><h2>🌍 Country → City → Airline（${filterTitle()}）</h2><span class="count">${countryTotals.length} countries</span></div><div class="list-container">`;
   countryTotals.forEach((c, i) => {
     const cid = `co_${i}`;
     html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.co}</span><span class="segment">${fmtNum(c.total)}</span></div>`;
@@ -302,7 +302,7 @@ function renderCityMode(panel, rows) {
   rows.forEach(r => { if (!byCity.has(r[2])) byCity.set(r[2], []); byCity.get(r[2]).push(r); });
   const cityTotals = Array.from(byCity.entries()).map(([ci, rs]) => ({ ci, rs, total: rs.reduce((s,r) => s + r[6], 0), country: rs[0][3] })).sort((a,b) => b.total - a.total);
   const grand = cityTotals.reduce((s,c) => s + c.total, 0);
-  let html = `<div class="results-header"><h2>🏙️ City → Airline（${filterTitle()}）</h2><span class="count">${cityTotals.length} cities · ${fmtNum(grand)} segments</span></div><div class="list-container">`;
+  let html = `<div class="results-header"><h2>🏙️ City → Airline（${filterTitle()}）</h2><span class="count">${cityTotals.length} cities</span></div><div class="list-container">`;
   cityTotals.forEach((c, i) => {
     const cid = `ci_${i}`;
     html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.ci} ${cityCodeTag(c.ci)} <span style="font-size:11px;color:var(--text-muted);font-weight:400">· ${c.country}</span></span><span class="segment">${fmtNum(c.total)}</span></div>`;
