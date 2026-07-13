@@ -73,6 +73,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .sub-sub-item .rank { width: 32px; color: var(--text-muted); }
 .sub-sub-item .name { flex: 1; }
 .sub-sub-item .segment { display: none; font-weight: 600; color: #6366f1; min-width: 80px; text-align: right; }
+.share-bar { position: relative; width: 100px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin-left: 12px; flex-shrink: 0; }
+.share-bar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--primary-light), var(--primary)); border-radius: 4px; transition: width 0.3s; }
+.list-item .share-bar { width: 140px; height: 9px; }
+.sub-item .share-bar { width: 120px; }
+.sub-item .share-bar .fill { background: linear-gradient(90deg, #dbeafe, var(--accent-blue)); }
+.sub-sub-item .share-bar { width: 100px; height: 7px; }
+.sub-sub-item .share-bar .fill { background: linear-gradient(90deg, #ede9fe, #8b5cf6); }
 .empty-state { padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .badge-airline { background: #dbeafe; color: #1d4ed8; }
@@ -284,11 +291,13 @@ function renderAirlineMode(panel, rows) {
   const airlineTotals = Array.from(byAirline.entries()).map(([al, rs]) => ({ al, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
   // Top-level buffer: all airline codes
   COPY_BUFFERS['top'] = airlineTotals.map(a => a.al);
+  const maxA = airlineTotals[0]?.total || 1;
   let html = `<div class="results-header"><h2>🛫 Airline → Country → City（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY airlines')}<span class="count">${airlineTotals.length} airlines</span></div></div><div class="list-container">`;
   airlineTotals.forEach((a, i) => {
     const aid = `al_${i}`;
-    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${aid}', this)">▶</button><span class="rank">${i+1}</span><span class="name"><span class="badge badge-airline">${a.al}</span></span><span class="segment">${fmtNum(a.total)}</span></div>`;
+    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${aid}', this)">▶</button><span class="rank">${i+1}</span><span class="name"><span class="badge badge-airline">${a.al}</span></span><span class="share-bar"><span class="fill" style="width:${(a.total/maxA*100).toFixed(1)}%"></span></span></div>`;
     const byCountry = aggregate(a.rs, r => r[3]);
+    const maxCo = byCountry[0]?.[1] || 1;
     html += `<div class="sub-list" id="${aid}">`;
     byCountry.forEach(([country, cTotal], j) => {
       const coId = `${aid}_c${j}`;
@@ -297,10 +306,11 @@ function renderAirlineMode(panel, rows) {
       const byCity = aggregate(cityRows, r => r[2]);
       const cityCodes = byCity.map(([city]) => CITY_CODE[city] || city).filter(Boolean);
       COPY_BUFFERS[coId] = cityCodes;
-      html += `<div class="sub-item"><button class="expand-btn" onclick="toggleExpand('${coId}', this)">▶</button><span class="rank">${j+1}</span><span class="name">${country}</span><span class="segment">${fmtNum(cTotal)}</span></div>`;
+      const maxCi_a = byCity[0]?.[1] || 1;
+      html += `<div class="sub-item"><button class="expand-btn" onclick="toggleExpand('${coId}', this)">▶</button><span class="rank">${j+1}</span><span class="name">${country}</span><span class="share-bar"><span class="fill" style="width:${(cTotal/maxCo*100).toFixed(1)}%"></span></span></div>`;
       html += `<div class="sub-sub-list" id="${coId}"><div class="sub-sub-header">${copyBtn(coId,'COPY city codes')}</div>`;
       byCity.forEach(([city, ct], k) => {
-        html += `<div class="sub-sub-item"><span class="rank">${k+1}</span><span class="name">${city} ${cityCodeTag(city)}</span><span class="segment">${fmtNum(ct)}</span></div>`;
+        html += `<div class="sub-sub-item"><span class="rank">${k+1}</span><span class="name">${city} ${cityCodeTag(city)}</span><span class="share-bar"><span class="fill" style="width:${(ct/maxCi_a*100).toFixed(1)}%"></span></span></div>`;
       });
       html += '</div>';
     });
@@ -317,24 +327,27 @@ function renderCountryMode(panel, rows) {
   rows.forEach(r => { if (!byCountry.has(r[3])) byCountry.set(r[3], []); byCountry.get(r[3]).push(r); });
   const countryTotals = Array.from(byCountry.entries()).map(([co, rs]) => ({ co, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
   COPY_BUFFERS['top'] = countryTotals.map(c => c.co);
+  const maxCoTop = countryTotals[0]?.total || 1;
   let html = `<div class="results-header"><h2>🌍 Country → City → Airline（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY countries')}<span class="count">${countryTotals.length} countries</span></div></div><div class="list-container">`;
   countryTotals.forEach((c, i) => {
     const cid = `co_${i}`;
     // Collect city codes for this country
     const byCity = aggregate(c.rs, r => r[2]);
+    const maxCi = byCity[0]?.[1] || 1;
     const cityCodes = byCity.map(([city]) => CITY_CODE[city] || city).filter(Boolean);
     COPY_BUFFERS[cid] = cityCodes;
-    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.co}</span><span class="segment">${fmtNum(c.total)}</span></div>`;
+    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.co}</span><span class="share-bar"><span class="fill" style="width:${(c.total/maxCoTop*100).toFixed(1)}%"></span></span></div>`;
     html += `<div class="sub-list" id="${cid}"><div class="sub-header">${copyBtn(cid,'COPY city codes')}</div>`;
     byCity.forEach(([city, cityTotal], j) => {
       const ciId = `${cid}_ci${j}`;
       const cityRows = c.rs.filter(r => r[2] === city);
       const byAl = aggregate(cityRows, r => r[0]);
       COPY_BUFFERS[ciId] = byAl.map(([al]) => al);
-      html += `<div class="sub-item"><button class="expand-btn" onclick="toggleExpand('${ciId}', this)">▶</button><span class="rank">${j+1}</span><span class="name">${city} ${cityCodeTag(city)}</span><span class="segment">${fmtNum(cityTotal)}</span></div>`;
+      const maxAl = byAl[0]?.[1] || 1;
+      html += `<div class="sub-item"><button class="expand-btn" onclick="toggleExpand('${ciId}', this)">▶</button><span class="rank">${j+1}</span><span class="name">${city} ${cityCodeTag(city)}</span><span class="share-bar"><span class="fill" style="width:${(cityTotal/maxCi*100).toFixed(1)}%"></span></span></div>`;
       html += `<div class="sub-sub-list" id="${ciId}"><div class="sub-sub-header">${copyBtn(ciId,'COPY airlines')}</div>`;
       byAl.forEach(([al, at], k) => {
-        html += `<div class="sub-sub-item"><span class="rank">${k+1}</span><span class="name"><span class="badge badge-airline">${al}</span></span><span class="segment">${fmtNum(at)}</span></div>`;
+        html += `<div class="sub-sub-item"><span class="rank">${k+1}</span><span class="name"><span class="badge badge-airline">${al}</span></span><span class="share-bar"><span class="fill" style="width:${(at/maxAl*100).toFixed(1)}%"></span></span></div>`;
       });
       html += '</div>';
     });
@@ -352,15 +365,17 @@ function renderCityMode(panel, rows) {
   const cityTotals = Array.from(byCity.entries()).map(([ci, rs]) => ({ ci, rs, total: rs.reduce((s,r) => s + r[6], 0), country: rs[0][3] })).sort((a,b) => b.total - a.total);
   // Top buffer: all city codes
   COPY_BUFFERS['top'] = cityTotals.map(c => CITY_CODE[c.ci] || c.ci).filter(Boolean);
+  const maxCiTop = cityTotals[0]?.total || 1;
   let html = `<div class="results-header"><h2>🏙️ City → Airline（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY city codes')}<span class="count">${cityTotals.length} cities</span></div></div><div class="list-container">`;
   cityTotals.forEach((c, i) => {
     const cid = `ci_${i}`;
     const byAl = aggregate(c.rs, r => r[0]);
     COPY_BUFFERS[cid] = byAl.map(([al]) => al);
-    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.ci} ${cityCodeTag(c.ci)} <span style="font-size:11px;color:var(--text-muted);font-weight:400">· ${c.country}</span></span><span class="segment">${fmtNum(c.total)}</span></div>`;
+    const maxAlC = byAl[0]?.[1] || 1;
+    html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${c.ci} ${cityCodeTag(c.ci)} <span style="font-size:11px;color:var(--text-muted);font-weight:400">· ${c.country}</span></span><span class="share-bar"><span class="fill" style="width:${(c.total/maxCiTop*100).toFixed(1)}%"></span></span></div>`;
     html += `<div class="sub-list" id="${cid}"><div class="sub-header">${copyBtn(cid,'COPY airlines')}</div>`;
     byAl.forEach(([al, at], j) => {
-      html += `<div class="sub-item"><button class="expand-btn invisible">▶</button><span class="rank">${j+1}</span><span class="name"><span class="badge badge-airline">${al}</span></span><span class="segment">${fmtNum(at)}</span></div>`;
+      html += `<div class="sub-item"><button class="expand-btn invisible">▶</button><span class="rank">${j+1}</span><span class="name"><span class="badge badge-airline">${al}</span></span><span class="share-bar"><span class="fill" style="width:${(at/maxAlC*100).toFixed(1)}%"></span></span></div>`;
     });
     html += '</div>';
   });
