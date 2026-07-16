@@ -386,7 +386,8 @@ function renderAirlineMode(panel, rows) {
     html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${aid}', this)">▶</button><span class="rank">${i+1}</span><span class="name"><span class="badge badge-airline">${a.al}</span></span><span class="share-bar"><span class="fill" style="width:${(a.total/maxA*100).toFixed(1)}%"></span></span></div>`;
     const byCountry = aggregate(a.rs, r => r[3]);
     const maxCo = byCountry[0]?.[1] || 1;
-    html += `<div class="sub-list" id="${aid}">`;
+    COPY_BUFFERS[aid + '_countries'] = byCountry.map(([country]) => COUNTRY_ISO[country] || country);
+    html += `<div class="sub-list" id="${aid}"><div class="sub-header">${copyBtn(aid + '_countries','COPY countries')}</div>`;
     byCountry.forEach(([country, cTotal], j) => {
       const coId = `${aid}_c${j}`;
       const cityRows = a.rs.filter(r => r[3] === country);
