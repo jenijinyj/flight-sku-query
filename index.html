@@ -30,13 +30,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .chip:hover { border-color: var(--primary); color: var(--primary); }
 .chip.active { background: var(--primary); border-color: var(--primary); color: white; }
 .chip.all-chip { border-style: dashed; }
-.country-wrap { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.country-search-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.country-search { flex: 1; min-width: 180px; padding: 6px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; outline: none; }
-.country-search:focus { border-color: var(--primary); }
-.country-summary { font-size: 11px; color: var(--text-muted); }
-.country-chip-list { display: flex; gap: 4px; flex-wrap: wrap; max-height: 100px; overflow-y: auto; padding: 4px 0; }
-.chip.country-chip { padding: 4px 10px; font-size: 11px; font-family: -apple-system, sans-serif; letter-spacing: 0.03em; }
+.code-picker-wrap { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.code-picker-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.code-search { flex: 1; min-width: 180px; padding: 6px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; outline: none; }
+.code-search:focus { border-color: var(--primary); }
+.code-summary { font-size: 11px; color: var(--text-muted); }
+.code-chip-list { display: flex; gap: 4px; flex-wrap: wrap; max-height: 100px; overflow-y: auto; padding: 4px 0; }
+.chip.code-chip { padding: 4px 10px; font-size: 11px; letter-spacing: 0.03em; }
 .mini-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; font-size: 11px; color: var(--text-muted); }
 .mini-btn:hover { border-color: var(--primary); color: var(--primary); }
 .tab-group { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -117,14 +117,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <div class="filter-row"><span class="filter-label">Class</span><div class="chip-group" id="classChips"></div></div>
     <div class="filter-row"><span class="filter-label">Continent</span><div class="chip-group" id="continentChips"></div></div>
     <div class="filter-row"><span class="filter-label">Country</span>
-      <div class="country-wrap">
-        <div class="country-search-row">
-          <input type="text" class="country-search" id="countrySearch" placeholder="搜索国家代码或名称 (如 CN / China / 中国)…" oninput="renderCountryChips()">
-          <button class="mini-btn" onclick="selectAllCountries()">全选</button>
+      <div class="code-picker-wrap">
+        <div class="code-picker-row">
+          <input type="text" class="code-search" id="countrySearch" placeholder="搜索国家代码或名称 (如 CN / China / 中国)…" oninput="renderCountryChips(); populateSelect(); renderResults();">
           <button class="mini-btn" onclick="clearCountries()">清空</button>
-          <span class="country-summary" id="countrySummary"></span>
+          <span class="code-summary" id="countrySummary"></span>
         </div>
-        <div class="country-chip-list" id="countryChips"></div>
+        <div class="code-chip-list" id="countryChips"></div>
+      </div>
+    </div>
+    <div class="filter-row"><span class="filter-label">Airline</span>
+      <div class="code-picker-wrap">
+        <div class="code-picker-row">
+          <input type="text" class="code-search" id="airlineSearch" placeholder="搜索航司代码 (如 SQ, TR, MU)…" oninput="renderAirlineChips(); populateSelect(); renderResults();">
+          <button class="mini-btn" onclick="clearAirlines()">清空</button>
+          <span class="code-summary" id="airlineSummary"></span>
+        </div>
+        <div class="code-chip-list" id="airlineChips"></div>
       </div>
     </div>
     <div class="filter-row"><span class="filter-label">View</span>
@@ -134,7 +143,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <div class="tab" data-mode="city" onclick="setMode('city')">🏙️ City</div>
       </div>
     </div>
-    <div class="filter-row"><span class="filter-label">Filter</span><select class="value-select" id="valueSelect" onchange="onValueChange()"></select></div>
+    <div class="filter-row" id="filterDropdownRow"><span class="filter-label">Filter</span><select class="value-select" id="valueSelect" onchange="onValueChange()"></select></div>
     <div class="schema-hint" id="schemaHint"></div>
   </div>
   <div class="results" id="resultsPanel"></div>
@@ -147,7 +156,6 @@ let ROWS = RAW.rows;
 const BUILTIN_ROWS = RAW.rows;
 const CONT_NAMES = RAW.contNames;
 const COUNTRY_ISO = RAW.countryIso || {};
-// Reverse: ISO -> country name
 const ISO_TO_COUNTRY = {};
 Object.entries(COUNTRY_ISO).forEach(([c, iso]) => { ISO_TO_COUNTRY[iso] = c; });
 
@@ -164,8 +172,8 @@ rebuildCityCode();
 
 let selectedClasses = new Set(CLASSES);
 let selectedContinents = new Set(CONTINENTS);
-// selectedCountries stores ISO codes; empty set means "no filter" (all countries)
-let selectedCountries = new Set();
+let selectedCountries = new Set();  // empty = all
+let selectedAirlines = new Set();   // empty = all
 let currentMode = 'airline';
 let currentValue = '';
 
@@ -174,19 +182,42 @@ function cityCodeTag(cityName) {
   return code ? `<span class="code-tag">${code}</span>` : '';
 }
 
-function getAllCountries() {
+
+// If user has typed in search box but not clicked chips, use search-matches as the implicit filter
+function getEffectiveCountries() {
+  if (selectedCountries.size > 0) return selectedCountries;
+  const q = (document.getElementById('countrySearch')?.value || '').trim().toLowerCase();
+  if (!q) return null; // no filter
   const set = new Set();
-  ROWS.forEach(r => { if (r[3]) set.add(r[3]); });
-  return Array.from(set).sort();
+  ROWS.forEach(r => {
+    if (r[3] && COUNTRY_ISO[r[3]]) {
+      const iso = COUNTRY_ISO[r[3]];
+      if (iso.toLowerCase().includes(q) || r[3].toLowerCase().includes(q)) set.add(iso);
+    }
+  });
+  return set;
+}
+function getEffectiveAirlines() {
+  if (selectedAirlines.size > 0) return selectedAirlines;
+  const q = (document.getElementById('airlineSearch')?.value || '').trim().toLowerCase();
+  if (!q) return null;
+  const set = new Set();
+  ROWS.forEach(r => { if (r[0] && r[0].toLowerCase().includes(q)) set.add(r[0]); });
+  return set;
 }
 
 function getFilteredRows() {
+  const effCountries = getEffectiveCountries();
+  const effAirlines = getEffectiveAirlines();
   return ROWS.filter(r => {
     if (!selectedClasses.has(r[5])) return false;
     if (!selectedContinents.has(String(r[4]))) return false;
-    if (selectedCountries.size > 0) {
+    if (effCountries) {
       const iso = COUNTRY_ISO[r[3]];
-      if (!iso || !selectedCountries.has(iso)) return false;
+      if (!iso || !effCountries.has(iso)) return false;
+    }
+    if (effAirlines) {
+      if (!effAirlines.has(r[0])) return false;
     }
     return true;
   });
@@ -218,26 +249,24 @@ function renderCountryChips() {
   const wrap = document.getElementById('countryChips');
   const summary = document.getElementById('countrySummary');
   const q = (document.getElementById('countrySearch').value || '').trim().toLowerCase();
-  // Build list of ISO codes limited to countries that appear in ROWS
   const rowCountries = new Set();
   ROWS.forEach(r => { if (r[3] && COUNTRY_ISO[r[3]]) rowCountries.add(r[3]); });
   const items = Array.from(rowCountries).map(name => ({ name, iso: COUNTRY_ISO[name] }))
     .sort((a,b) => a.iso.localeCompare(b.iso));
+  const filtered = items.filter(it => !q || it.iso.toLowerCase().includes(q) || it.name.toLowerCase().includes(q));
 
-  // Filter by query
-  const filtered = items.filter(it => {
-    if (!q) return true;
-    return it.iso.toLowerCase().includes(q) || it.name.toLowerCase().includes(q);
-  });
-
-  // Selected chips first (if any selected)
   const selArr = Array.from(selectedCountries);
-  summary.textContent = selArr.length === 0
-    ? `全部国家（${items.length}）`
-    : `已选 ${selArr.length} / ${items.length}：${selArr.slice(0,8).join(', ')}${selArr.length>8?'…':''}`;
+  if (selArr.length === 0 && q) {
+    summary.textContent = `搜索匹配 ${filtered.length} 个国家（自动应用为筛选）`;
+    summary.style.color = 'var(--primary)';
+  } else if (selArr.length === 0) {
+    summary.textContent = `全部国家（${items.length}）`;
+    summary.style.color = '';
+  } else {
+    summary.textContent = `已选 ${selArr.length}：${selArr.slice(0,8).join(', ')}${selArr.length>8?'…':''}`;
+    summary.style.color = '';
+  }
 
-  const showList = q ? filtered : (selArr.length ? items.filter(it => selectedCountries.has(it.iso) || filtered.slice(0,60).some(f => f.iso === it.iso)) : items);
-  // When no query and no selection: show all; if selection exists, show selected first + rest
   let display = q ? filtered : items;
   if (!q && selArr.length) {
     display = [
@@ -245,10 +274,43 @@ function renderCountryChips() {
       ...items.filter(it => !selectedCountries.has(it.iso)),
     ];
   }
-
   wrap.innerHTML = display.map(it => {
     const active = selectedCountries.has(it.iso);
-    return `<div class="chip country-chip ${active?'active':''}" onclick="toggleCountry('${it.iso}')" title="${it.name}">${it.iso}</div>`;
+    return `<div class="chip code-chip ${active?'active':''}" onclick="toggleCountry('${it.iso}')" title="${it.name}">${it.iso}</div>`;
+  }).join('');
+}
+
+function renderAirlineChips() {
+  const wrap = document.getElementById('airlineChips');
+  const summary = document.getElementById('airlineSummary');
+  const q = (document.getElementById('airlineSearch').value || '').trim().toLowerCase();
+  const allAirlines = new Set();
+  ROWS.forEach(r => { if (r[0]) allAirlines.add(r[0]); });
+  const items = Array.from(allAirlines).sort();
+  const filtered = items.filter(a => !q || a.toLowerCase().includes(q));
+
+  const selArr = Array.from(selectedAirlines);
+  if (selArr.length === 0 && q) {
+    summary.textContent = `搜索匹配 ${filtered.length} 个航司（自动应用为筛选）`;
+    summary.style.color = 'var(--primary)';
+  } else if (selArr.length === 0) {
+    summary.textContent = `全部航司（${items.length}）`;
+    summary.style.color = '';
+  } else {
+    summary.textContent = `已选 ${selArr.length}：${selArr.slice(0,10).join(', ')}${selArr.length>10?'…':''}`;
+    summary.style.color = '';
+  }
+
+  let display = q ? filtered : items;
+  if (!q && selArr.length) {
+    display = [
+      ...items.filter(a => selectedAirlines.has(a)),
+      ...items.filter(a => !selectedAirlines.has(a)),
+    ];
+  }
+  wrap.innerHTML = display.map(a => {
+    const active = selectedAirlines.has(a);
+    return `<div class="chip code-chip ${active?'active':''}" onclick="toggleAirline('${a}')">${a}</div>`;
   }).join('');
 }
 
@@ -277,8 +339,13 @@ function toggleCountry(iso) {
   else selectedCountries.add(iso);
   renderCountryChips(); populateSelect(); renderResults();
 }
-function selectAllCountries() { selectedCountries = new Set(); renderCountryChips(); populateSelect(); renderResults(); }
 function clearCountries() { selectedCountries = new Set(); renderCountryChips(); populateSelect(); renderResults(); }
+function toggleAirline(al) {
+  if (selectedAirlines.has(al)) selectedAirlines.delete(al);
+  else selectedAirlines.add(al);
+  renderAirlineChips(); populateSelect(); renderResults();
+}
+function clearAirlines() { selectedAirlines = new Set(); renderAirlineChips(); populateSelect(); renderResults(); }
 
 function setMode(mode) {
   currentMode = mode;
@@ -306,6 +373,9 @@ function populateSelect() {
       return `<option value="${v}">${v}</option>`;
     }).join('');
   currentValue = '';
+
+  // Hide Filter dropdown for Airline view (users use airline chips instead)
+  document.getElementById('filterDropdownRow').style.display = (currentMode === 'airline') ? 'none' : 'flex';
 }
 
 function onValueChange() { currentValue = document.getElementById('valueSelect').value; renderResults(); }
@@ -325,8 +395,7 @@ function renderResults() {
   const panel = document.getElementById('resultsPanel');
   let rows = getFilteredRows();
   if (currentValue) {
-    if (currentMode === 'airline') rows = rows.filter(r => r[0] === currentValue);
-    else if (currentMode === 'country') rows = rows.filter(r => r[3] === currentValue);
+    if (currentMode === 'country') rows = rows.filter(r => r[3] === currentValue);
     else if (currentMode === 'city') rows = rows.filter(r => r[2] === currentValue);
   }
   if (currentMode === 'airline') renderAirlineMode(panel, rows);
@@ -341,7 +410,9 @@ function filterTitle() {
   const contLabel = contArr.length === CONTINENTS.length ? 'ALL continents' : contArr.sort().map(c => CONT_NAMES[c]).join('+');
   const coArr = Array.from(selectedCountries);
   const coLabel = coArr.length === 0 ? 'ALL countries' : (coArr.length <= 4 ? coArr.sort().join('+') : `${coArr.length} countries`);
-  return `${clsLabel} · ${contLabel} · ${coLabel}`;
+  const alArr = Array.from(selectedAirlines);
+  const alLabel = alArr.length === 0 ? 'ALL airlines' : (alArr.length <= 4 ? alArr.sort().join('+') : `${alArr.length} airlines`);
+  return `${clsLabel} · ${contLabel} · ${coLabel} · ${alLabel}`;
 }
 function copyBtn(dataAttr, label='COPY') {
   return `<button class="copy-btn small" onclick="copyCodes(this, '${dataAttr}')">📋 ${label}</button>`;
@@ -368,13 +439,39 @@ function showToast(msg) {
 
 let COPY_BUFFERS = {};
 
-// AIRLINE VIEW
-// Behavior: airline -> country -> city normally.
-// When countries filter is active (>=1), the mid-level "country" is superfluous if the whole airline is inside that one country;
-// we still show it for clarity — the user can drill down freely.
+// AIRLINE VIEW — Auto-flatten when a single airline is selected
 function renderAirlineMode(panel, rows) {
   if (!rows.length) { panel.innerHTML = '<div class="empty-state">无数据</div>'; return; }
   COPY_BUFFERS = {};
+  const distinctAirlines = new Set();
+  rows.forEach(r => distinctAirlines.add(r[0]));
+  const singleAirline = distinctAirlines.size === 1;
+
+  if (singleAirline) {
+    // Show Country → City for that one airline
+    const onlyAirline = Array.from(distinctAirlines)[0];
+    const byCountry = aggregate(rows, r => r[3]);
+    const maxCo = byCountry[0]?.[1] || 1;
+    COPY_BUFFERS['top'] = byCountry.map(([co]) => COUNTRY_ISO[co] || co);
+    let html = `<div class="results-header"><h2>🌍 Countries for ${onlyAirline}（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY countries')}<span class="count">${byCountry.length} countries</span></div></div><div class="list-container">`;
+    byCountry.forEach(([country, cTotal], i) => {
+      const cid = `sa_co_${i}`;
+      const cityRows = rows.filter(r => r[3] === country);
+      const byCity = aggregate(cityRows, r => r[2]);
+      const maxCi = byCity[0]?.[1] || 1;
+      COPY_BUFFERS[cid] = byCity.map(([city]) => CITY_CODE[city] || city).filter(Boolean);
+      html += `<div class="list-item"><button class="expand-btn" onclick="toggleExpand('${cid}', this)">▶</button><span class="rank">${i+1}</span><span class="name">${country}</span><span class="share-bar"><span class="fill" style="width:${(cTotal/maxCo*100).toFixed(1)}%"></span></span></div>`;
+      html += `<div class="sub-list" id="${cid}"><div class="sub-header">${copyBtn(cid,'COPY city codes')}</div>`;
+      byCity.forEach(([city, ct], j) => {
+        html += `<div class="sub-item"><button class="expand-btn invisible">▶</button><span class="rank">${j+1}</span><span class="name">${city} ${cityCodeTag(city)}</span><span class="share-bar"><span class="fill" style="width:${(ct/maxCi*100).toFixed(1)}%"></span></span></div>`;
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    panel.innerHTML = html;
+    return;
+  }
+
   const byAirline = new Map();
   rows.forEach(r => { if (!byAirline.has(r[0])) byAirline.set(r[0], []); byAirline.get(r[0]).push(r); });
   const airlineTotals = Array.from(byAirline.entries()).map(([al, rs]) => ({ al, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
@@ -408,21 +505,14 @@ function renderAirlineMode(panel, rows) {
   panel.innerHTML = html;
 }
 
-// COUNTRY VIEW
-// Behavior: when the country filter narrows to exactly ONE country (or the Filter dropdown picks one),
-// show the Airline list directly — skipping the redundant country level and going City → Airline underneath.
-// Otherwise: normal Country → City → Airline hierarchy.
 function renderCountryMode(panel, rows) {
   if (!rows.length) { panel.innerHTML = '<div class="empty-state">无数据</div>'; return; }
   COPY_BUFFERS = {};
-
-  // Detect single-country focus: either 1 country in filter chips, or currentValue is a country
   const distinctCountries = new Set();
   rows.forEach(r => distinctCountries.add(r[3]));
   const singleCountry = distinctCountries.size === 1;
 
   if (singleCountry) {
-    // Flatten to airline list, with cities inside
     const onlyCountry = Array.from(distinctCountries)[0];
     const iso = COUNTRY_ISO[onlyCountry] || '';
     const byAirline = new Map();
@@ -430,7 +520,6 @@ function renderCountryMode(panel, rows) {
     const airlineTotals = Array.from(byAirline.entries()).map(([al, rs]) => ({ al, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
     COPY_BUFFERS['top'] = airlineTotals.map(a => a.al);
     const maxA = airlineTotals[0]?.total || 1;
-
     let html = `<div class="results-header"><h2>🛫 Airline in ${onlyCountry}${iso?' ('+iso+')':''}（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY airlines')}<span class="count">${airlineTotals.length} airlines</span></div></div><div class="list-container">`;
     airlineTotals.forEach((a, i) => {
       const aid = `so_al_${i}`;
@@ -450,13 +539,12 @@ function renderCountryMode(panel, rows) {
     return;
   }
 
-  // Multi-country path: Country → City → Airline
   const byCountry = new Map();
   rows.forEach(r => { if (!byCountry.has(r[3])) byCountry.set(r[3], []); byCountry.get(r[3]).push(r); });
   const countryTotals = Array.from(byCountry.entries()).map(([co, rs]) => ({ co, rs, total: rs.reduce((s,r) => s + r[6], 0) })).sort((a,b) => b.total - a.total);
-  COPY_BUFFERS['top'] = countryTotals.map(c => c.co);
+  COPY_BUFFERS['top'] = countryTotals.map(c => COUNTRY_ISO[c.co] || c.co);
   const maxCoTop = countryTotals[0]?.total || 1;
-  let html = `<div class="results-header"><h2>🌍 Country → City → Airline（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY countries')}<span class="count">${countryTotals.length} countries</span></div></div><div class="list-container">`;
+  let html = `<div class="results-header"><h2>🌍 Country → City → Airline（${filterTitle()}）</h2><div class="right-tools">${copyBtn('top','COPY country codes')}<span class="count">${countryTotals.length} countries</span></div></div><div class="list-container">`;
   countryTotals.forEach((c, i) => {
     const cid = `co_${i}`;
     const byCity = aggregate(c.rs, r => r[2]);
@@ -484,7 +572,6 @@ function renderCountryMode(panel, rows) {
   panel.innerHTML = html;
 }
 
-// CITY VIEW
 function renderCityMode(panel, rows) {
   if (!rows.length) { panel.innerHTML = '<div class="empty-state">无数据</div>'; return; }
   COPY_BUFFERS = {};
@@ -516,13 +603,10 @@ function toggleExpand(id, btn) {
   el.classList.toggle('show');
   btn.classList.toggle('open');
 }
-// ===== Data upload =====
 function updateDataInfo(source) {
   document.getElementById('dataInfo').textContent = `${ROWS.length.toLocaleString()} rows · ${source}`;
 }
-
 function normalizeHeader(h) { return String(h||'').trim().toLowerCase().replace(/[\s_-]/g, ''); }
-
 const COLUMN_ALIASES = {
   airline: ['airline','al','carrier','airlinecode'],
   code: ['acitycode','citycode','code','iatacode','iata'],
@@ -532,7 +616,6 @@ const COLUMN_ALIASES = {
   class: ['class','cabin','cabinclass','classcode'],
   segment: ['segment','segments','seg','pax','volume','count'],
 };
-
 function detectColumns(headers) {
   const map = {};
   headers.forEach((h, i) => {
@@ -543,7 +626,6 @@ function detectColumns(headers) {
   });
   return map;
 }
-
 function convertParsedToRows(parsed) {
   if (!parsed.length) return [];
   const headers = parsed[0];
@@ -551,7 +633,7 @@ function convertParsedToRows(parsed) {
   const colMap = detectColumns(headers);
   const missing = ['airline','city','country','continent','class','segment'].filter(k => !(k in colMap));
   if (missing.length) {
-    throw new Error(`缺少必要列: ${missing.join(', ')}。\n请确保表头包含（不区分大小写/下划线）：airline, acitycode, acityename, acountryename, continent, class, segment`);
+    throw new Error(`缺少必要列: ${missing.join(', ')}。\n请确保表头包含：airline, acitycode, acityename, acountryename, continent, class, segment`);
   }
   return dataRows.map(row => [
     String(row[colMap.airline] || '').trim(),
@@ -563,7 +645,6 @@ function convertParsedToRows(parsed) {
     Number(row[colMap.segment]) || 0,
   ]).filter(r => r[0] && r[3] && r[5]);
 }
-
 function handleFileUpload(evt) {
   const file = evt.target.files[0];
   if (!file) return;
@@ -574,15 +655,13 @@ function handleFileUpload(evt) {
       let parsed;
       if (/\.(xlsx|xls)$/i.test(file.name)) {
         const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        parsed = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null });
       } else if (/\.(csv|tsv)$/i.test(file.name)) {
         const text = new TextDecoder().decode(new Uint8Array(data));
         const wb = XLSX.read(text, { type: 'string' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        parsed = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null });
       } else {
-        alert('不支持的文件格式，请使用 .xlsx / .xls / .csv / .tsv'); return;
+        alert('不支持的文件格式'); return;
       }
       const newRows = convertParsedToRows(parsed);
       if (!newRows.length) throw new Error('未能解析出有效数据行');
@@ -591,9 +670,11 @@ function handleFileUpload(evt) {
       selectedClasses = new Set(CLASSES);
       selectedContinents = new Set(CONTINENTS);
       selectedCountries = new Set();
+      selectedAirlines = new Set();
       currentValue = '';
       document.getElementById('countrySearch').value = '';
-      renderClassChips(); renderContinentChips(); renderCountryChips(); populateSelect(); renderResults();
+      document.getElementById('airlineSearch').value = '';
+      renderClassChips(); renderContinentChips(); renderCountryChips(); renderAirlineChips(); populateSelect(); renderResults();
       updateDataInfo(`已加载 ${file.name}`);
       document.getElementById('schemaHint').classList.remove('show');
     } catch (err) {
@@ -608,16 +689,17 @@ function handleFileUpload(evt) {
   reader.onerror = () => alert('文件读取失败');
   reader.readAsArrayBuffer(file);
 }
-
 function resetToBuiltIn() {
   ROWS = BUILTIN_ROWS;
   rebuildCityCode();
   selectedClasses = new Set(CLASSES);
   selectedContinents = new Set(CONTINENTS);
   selectedCountries = new Set();
+  selectedAirlines = new Set();
   currentValue = '';
   document.getElementById('countrySearch').value = '';
-  renderClassChips(); renderContinentChips(); renderCountryChips(); populateSelect(); renderResults();
+  document.getElementById('airlineSearch').value = '';
+  renderClassChips(); renderContinentChips(); renderCountryChips(); renderAirlineChips(); populateSelect(); renderResults();
   updateDataInfo('内置数据');
   document.getElementById('schemaHint').classList.remove('show');
 }
@@ -626,6 +708,7 @@ function resetToBuiltIn() {
 renderClassChips();
 renderContinentChips();
 renderCountryChips();
+renderAirlineChips();
 populateSelect();
 renderResults();
 updateDataInfo('内置数据');
