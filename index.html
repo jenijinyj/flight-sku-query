@@ -167,8 +167,9 @@ const CLASSES = ['Y','C','F','S'];
 const CLASS_NAMES = { Y: 'Economy', C: 'Business', F: 'First', S: 'Premium' };
 const CONTINENTS = ['1','2','3','4','5','6'];
 
-// Region presets — named sets of ISO codes. Selecting a preset toggles all its codes on/off in selectedCountries.
 const REGION_PRESETS = {
+  'Short Haul': ['CN','MY','JP','TH','PH','VN','KR','ID','IN','TW','HK','BD','MM','KH','LK','NP','MV','MN','PK','LA','BN','TL','BT','TM','AU'],
+  'Long Haul': ['GB','IT','ES','DE','FR','CH','NL','AT','GR','NO','PT','FI','DK','RU','SE','IE','HU','CZ','BE','IS','PL','HR','GE','RO','BA','SI','AL','BG','MT','EE','CY','ME','LT','RS','MK','LV','BY','MD','LU','NZ','US','CA','MX','BR','CL','AR','PE','CO','MA','ZA','KE','TZ','MU','TN','GH','NG','NA','SC','UG','MG','DZ','RW','ET','KZ','UZ','KG','AZ','AM'],
   'Middle East': ['AE','BH','EG','IL','IQ','IR','JO','KW','LB','OM','QA','SA','SY','TR','YE'],
 };
 
@@ -274,10 +275,8 @@ function toggleRegionPreset(name) {
   if (!codes) return;
   const active = isPresetActive(name);
   if (active) {
-    // Remove all preset codes from selection
     codes.forEach(c => selectedCountries.delete(c));
   } else {
-    // Add all preset codes to selection
     codes.forEach(c => selectedCountries.add(c));
   }
   renderRegionPresetChips();
@@ -669,9 +668,7 @@ function convertParsedToRows(parsed) {
   const dataRows = parsed.slice(1);
   const colMap = detectColumns(headers);
   const missing = ['airline','city','country','continent','class','segment'].filter(k => !(k in colMap));
-  if (missing.length) {
-    throw new Error(`缺少必要列: ${missing.join(', ')}。\n请确保表头包含：airline, acitycode, acityename, acountryename, continent, class, segment`);
-  }
+  if (missing.length) throw new Error(`缺少必要列: ${missing.join(', ')}`);
   return dataRows.map(row => [
     String(row[colMap.airline] || '').trim(),
     String(colMap.code !== undefined ? (row[colMap.code] || '') : '').trim(),
@@ -697,9 +694,7 @@ function handleFileUpload(evt) {
         const text = new TextDecoder().decode(new Uint8Array(data));
         const wb = XLSX.read(text, { type: 'string' });
         parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null });
-      } else {
-        alert('不支持的文件格式'); return;
-      }
+      } else { alert('不支持的文件格式'); return; }
       const newRows = convertParsedToRows(parsed);
       if (!newRows.length) throw new Error('未能解析出有效数据行');
       ROWS = newRows;
@@ -741,7 +736,6 @@ function resetToBuiltIn() {
   document.getElementById('schemaHint').classList.remove('show');
 }
 
-// Init
 renderClassChips();
 renderContinentChips();
 renderRegionPresetChips();
